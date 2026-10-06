@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>注音加密解碼器</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--fg:#222;--mut:#777;--ac:#c2410c;--acs:#fde8dc;--bd:#ddd;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17161a;--card:#222126;--fg:#eee;--mut:#999;--ac:#fb923c;--acs:#3b2a1e;--bd:#3a3940}}
+:root[data-theme="dark"]{--bg:#17161a;--card:#222126;--fg:#eee;--mut:#999;--ac:#fb923c;--acs:#3b2a1e;--bd:#3a3940}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;padding:16px;max-width:560px}
+h1{font-size:20px;margin:6px 0 12px}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;cursor:pointer}
+.tabs{display:flex;gap:8px;margin-bottom:10px}
+.tabs button{flex:1;font-size:15px}
+.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+label{font-size:13px;color:var(--mut);display:block;margin:12px 0 4px}
+textarea,.out{width:100%;min-height:84px;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg);font-size:17px;font-family:inherit;resize:vertical}
+.out{font-family:ui-monospace,Menlo,monospace;word-break:break-all;white-space:pre-wrap;line-height:1.9}
+.out.zh{font-family:inherit}
+.chip{display:inline-block;background:var(--acs);color:var(--ac);border:1px dashed var(--ac);border-radius:8px;padding:0 7px;margin:0 1px;cursor:pointer;font-weight:600}
+.row{display:flex;gap:8px;margin-top:8px}
+.row button{flex:1;font-size:14px}
+.kp{display:none;grid-template-columns:repeat(8,1fr);gap:5px;margin-top:8px}
+.kp.show{display:grid}
+.kp button{padding:8px 0;font-size:17px}
+.kp .w{grid-column:span 2;font-size:14px}
+.opt{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut);margin-top:10px}
+.hint{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.5}
+details{margin-top:14px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px}
+.tbl{display:grid;grid-template-columns:repeat(3,1fr);gap:2px 10px;margin-top:8px;font-size:14px}
+.tbl span{border-bottom:1px solid var(--bd);padding:3px 2px}
+</style>
+</head>
+<body>
+<h1>🔐 注音加密解碼器</h1>
+<div class="tabs"><button id="te" class="on">加密</button><button id="td">解密</button></div>
+
+<label id="l1">輸入中文或注音</label>
+<textarea id="inp" placeholder="例如：你好，世界 或 ㄋㄧˇ ㄏㄠˇ"></textarea>
+<div class="kp" id="kp"></div>
+<div class="row"><button id="ex">範例</button><button id="cl">清除</button></div>
+<label class="opt" id="optw"><input type="checkbox" id="sp" checked> 每個音節後加空格</label>
+
+<div class="hint" id="zy"></div>
+<label>結果</label>
+<div class="out" id="out"></div>
+<div class="row"><button id="cp">複製結果</button><button id="sw">⇄ 結果當輸入</button></div>
+<p class="hint" id="hint"></p>
+
+<details><summary>對照表</summary><div class="tbl" id="tb"></div></details>
+
+<script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.26.0/dist/index.js"></script>
+<script>
+const rows=[["ㄅ","a9"],["ㄆ","b8"],["ㄇ","c7"],["ㄈ","d6"],["ㄉ","e5"],["ㄊ","f4"],["ㄋ","g3"],["ㄌ/ㄖ","h2"],["ㄍ","i1"],["ㄎ","jz"],["ㄏ","ky"],["ㄐ","lx"],["ㄑ","mw"],["ㄒ","nv"],["ㄓ/ㄗ","ou"],["ㄔ/ㄘ","pt"],["ㄕ/ㄙ","qs"],["ㄧ","rr"],["ㄨ","sq"],["ㄩ","tp"],["ㄚ","uo"],["ㄛ/ㄡ","vn"],["ㄜ/ㄦ","wm"],["ㄝ/ㄟ","xl"],["ㄞ","yk"],["ㄠ","zj"],["ㄢ","1i"],["ㄣ/ㄥ","2h"],["ㄤ","3g"],["ㄥ","4f"],["ˉ","5e"],["ˊ","6d"],["ˇ","7c"],["ˋ","8b"],["˙","9a"]];
+const enc={},dec={};
+rows.forEach(([s,c])=>{const a=s.split("/");dec[c]=a;a.forEach(x=>{if(!(x in enc)||a.length===1)enc[x]=c;});});
+enc["ㄣ"]="2h";enc["ㄥ"]="4f";
+const TONES="ˉˊˇˋ˙";
+const $=id=>document.getElementById(id);
+let mode="e",sel=[],lastText="";
+
+const INI={zh:"ㄓ",ch:"ㄔ",sh:"ㄕ",b:"ㄅ",p:"ㄆ",m:"ㄇ",f:"ㄈ",d:"ㄉ",t:"ㄊ",n:"ㄋ",l:"ㄌ",g:"ㄍ",k:"ㄎ",h:"ㄏ",j:"ㄐ",q:"ㄑ",x:"ㄒ",r:"ㄖ",z:"ㄗ",c:"ㄘ",s:"ㄙ"};
+const FIN={a:"ㄚ",o:"ㄛ",e:"ㄜ",ai:"ㄞ",ei:"ㄟ",ao:"ㄠ",ou:"ㄡ",an:"ㄢ",en:"ㄣ",ang:"ㄤ",eng:"ㄥ",er:"ㄦ",i:"ㄧ",ia:"ㄧㄚ",io:"ㄧㄛ",ie:"ㄧㄝ",iao:"ㄧㄠ",iu:"ㄧㄡ",ian:"ㄧㄢ",in:"ㄧㄣ",iang:"ㄧㄤ",ing:"ㄧㄥ",iong:"ㄩㄥ",u:"ㄨ",ua:"ㄨㄚ",uo:"ㄨㄛ",uai:"ㄨㄞ",ui:"ㄨㄟ",uan:"ㄨㄢ",un:"ㄨㄣ",uang:"ㄨㄤ",ong:"ㄨㄥ",ü:"ㄩ",üe:"ㄩㄝ",üan:"ㄩㄢ",ün:"ㄩㄣ"};
+const YW={yi:"i",ya:"ia",yo:"io",ye:"ie",yao:"iao",you:"iu",yan:"ian",yin:"in",yang:"iang",ying:"ing",yong:"iong",yu:"ü",yue:"üe",yuan:"üan",yun:"ün",wu:"u",wa:"ua",wo:"uo",wai:"uai",wei:"ui",wan:"uan",wen:"un",wang:"uang",weng:"ong"};
+const TM={1:"ˉ",2:"ˊ",3:"ˇ",4:"ˋ"};
+function py2zy(p){
+  p=p.toLowerCase().replace(/v|u:/g,"ü");
+  const m=p.match(/([0-5])$/);let tone=m?+m[1]:5;if(tone===0)tone=5;
+  const b=p.replace(/[0-5]$/,"");let ini="",rest=b;
+  if(YW[b])rest=YW[b];
+  else{
+    const two=b.slice(0,2);
+    if(INI[two]&&two.length===2){ini=INI[two];rest=b.slice(2);}
+    else if(INI[b[0]]){ini=INI[b[0]];rest=b.slice(1);}
+    if("jqx".includes(b[0])&&rest[0]==="u")rest="ü"+rest.slice(1);
+  }
+  let fin;
+  if(rest==="i"&&/^(zh|ch|sh|r|z|c|s)/.test(b)&&ini)fin="";
+  else fin=FIN[rest];
+  if(fin===undefined)return null;
+  return tone===5?"˙"+ini+fin:ini+fin+TM[tone];
+}
+function toZy(t){
+  const sep=$("sp").checked?" ":"";
+  return t.replace(/[\u3400-\u9fff]+/g,run=>{
+    if(!window.pinyinPro)return run;
+    const a=pinyinPro.pinyin(run,{toneType:"num",type:"array",v:true}).map((x,i)=>py2zy(x)||run[i]||x);
+    return sep+a.join(sep)+sep;
+  });
+}
+function encode(t){
+  const c=Array.from(toZy(t));let o="";
+  c.forEach((ch,i)=>{
+    if(ch in enc){
+      o+=enc[ch];
+      if($("sp").checked&&TONES.includes(ch)){
+        const n=c[i+1];
+        if(n!==undefined&&n!==" "&&n!=="\n"&&!(ch==="˙"&&/[ㄅ-ㄩ]/.test(n)))o+=" ";
+      }
+    }else o+=ch;
+  });
+  return o.replace(/ {2,}/g," ").trim().toLowerCase();
+}
+function decodeTokens(t){
+  const s=t.toLowerCase(),tk=[];
+  for(let i=0;i<s.length;){
+    const k=s.substr(i,2);
+    if(dec[k]){tk.push(dec[k].length>1?{o:dec[k],i:0}:{t:dec[k][0]});i+=2;}
+    else{tk.push({t:t[i]});i++;}
+  }
+  return tk;
+}
+function render(){
+  const t=$("inp").value,out=$("out");
+  if(mode==="e"){out.className="out";out.textContent=encode(t);lastText=out.textContent;
+    const hz=/[\u3400-\u9fff]/.test(t);
+    $("zy").textContent=!hz?"":window.pinyinPro?"轉成注音："+toZy(t).replace(/ {2,}/g," ").trim():"中文轉注音功能載入失敗，請檢查網路後重新整理。";
+    return;}
+  $("zy").textContent="";
+  out.className="out zh";out.innerHTML="";
+  let n=0,txt="";
+  const tk=decodeTokens(t);
+  tk.forEach(x=>{
+    if(x.o){
+      const idx=n++;if(sel[idx]==null||sel[idx]>=x.o.length)sel[idx]=0;
+      const b=document.createElement("span");b.className="chip";b.textContent=x.o[sel[idx]];
+      b.title=x.o.join(" / ");
+      b.onclick=()=>{sel[idx]=(sel[idx]+1)%x.o.length;render();};
+      out.appendChild(b);txt+=x.o[sel[idx]];
+    }else{out.appendChild(document.createTextNode(x.t));txt+=x.t;}
+  });
+  sel.length=n;lastText=txt;
+}
+function setMode(m){
+  mode=m;sel=[];
+  $("te").classList.toggle("on",m==="e");$("td").classList.toggle("on",m==="d");
+  $("l1").textContent=m==="e"?"輸入中文或注音":"輸入密文";
+  $("inp").placeholder=m==="e"?"例如：你好，世界 或 ㄋㄧˇ ㄏㄠˇ":"例如：g3rr7c ky4fzj7c";
+  $("kp").classList.toggle("show",m==="e");
+  $("optw").style.display=m==="e"?"flex":"none";
+  $("hint").textContent=m==="e"?"可直接貼中文，會自動轉成注音再加密（多音字依上下文判斷）。密文一律小寫；其他字元原樣保留。":"虛線橘色的字有多種可能，點一下可切換（例如 ㄌ ⇄ ㄖ）。";
+  render();
+}
+// keypad
+const keys="ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦˉˊˇˋ˙".split("");
+const kp=$("kp");
+keys.forEach(k=>{const b=document.createElement("button");b.textContent=k;b.onclick=()=>{$("inp").value+=k;render();};kp.appendChild(b);});
+[["空格"," "],["⌫",null]].forEach(([l,v])=>{const b=document.createElement("button");b.textContent=l;b.className="w";
+  b.onclick=()=>{const i=$("inp");i.value=v===null?Array.from(i.value).slice(0,-1).join(""):i.value+v;render();};kp.appendChild(b);});
+
+$("te").onclick=()=>setMode("e");$("td").onclick=()=>setMode("d");
+$("inp").oninput=()=>{sel=[];render();};
+$("sp").onchange=render;
+$("cl").onclick=()=>{$("inp").value="";sel=[];render();};
+$("ex").onclick=()=>{$("inp").value=mode==="e"?"你好，世界":"g3rr7c ky4fzj7c qs8 lxxl8";sel=[];render();};
+$("sw").onclick=()=>{const v=lastText;setMode(mode==="e"?"d":"e");$("inp").value=v;render();};
+$("cp").onclick=async()=>{
+  try{await navigator.clipboard.writeText(lastText);}catch(e){const r=document.createRange();r.selectNodeContents($("out"));const s=getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand("copy");}catch(_){}}
+  $("cp").textContent="已複製 ✓";setTimeout(()=>$("cp").textContent="複製結果",1200);
+};
+$("tb").innerHTML=rows.map(([s,c])=>`<span>${s} → ${c}</span>`).join("");
+setMode("e");
+</script>
+</body>
+</html>
