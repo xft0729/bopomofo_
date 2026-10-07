@@ -82,7 +82,17 @@ function py2zy(p){
   if(fin===undefined)return null;
   return tone===5?"˙"+ini+fin:ini+fin+TM[tone];
 }
+const CJKP={"。":".","、":",","「":'"',"」":'"',"『":'"',"』":'"',"《":"<","》":">","〈":"<","〉":">","【":"[","】":"]","〔":"[","〕":"]","…":"...","—":"-","・":"·","‧":"·","﹐":",","﹒":".","︰":":"};
+function toHalf(t){
+  return Array.from(t).map(c=>{
+    const n=c.codePointAt(0);
+    if(n===0x3000)return " ";
+    if(n>=0xFF01&&n<=0xFF5E)return String.fromCodePoint(n-0xFEE0);
+    return CJKP[c]??c;
+  }).join("");
+}
 function toZy(t){
+  t=toHalf(t);
   const sep=$("sp").checked?" ":"";
   return t.replace(/[\u3400-\u9fff]+/g,run=>{
     if(!window.pinyinPro)return run;
@@ -104,6 +114,7 @@ function encode(t){
   return o.replace(/ {2,}/g," ").trim().toLowerCase();
 }
 function decodeTokens(t){
+  t=toHalf(t);
   const s=t.toLowerCase(),tk=[];
   for(let i=0;i<s.length;){
     const k=s.substr(i,2);
@@ -140,7 +151,7 @@ function setMode(m){
   $("inp").placeholder=m==="e"?"例如：你好，世界 或 ㄋㄧˇ ㄏㄠˇ":"例如：g3rr7c ky4fzj7c";
   $("kp").classList.toggle("show",m==="e");
   $("optw").style.display=m==="e"?"flex":"none";
-  $("hint").textContent=m==="e"?"可直接貼中文，會自動轉成注音再加密（多音字依上下文判斷）。密文一律小寫；其他字元原樣保留。":"虛線橘色的字有多種可能，點一下可切換（例如 ㄌ ⇄ ㄖ）。";
+  $("hint").textContent=m==="e"?"可直接貼中文，會自動轉成注音再加密（多音字依上下文判斷）。密文一律小寫，全形符號會轉成半形；其他字元原樣保留。":"虛線橘色的字有多種可能，點一下可切換（例如 ㄌ ⇄ ㄖ）。";
   render();
 }
 // keypad
